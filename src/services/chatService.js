@@ -1,6 +1,6 @@
 import { Chat } from '../models/Chat.js';
 
-export const getOrCreateChat = async (participantIds, isGroup = false, groupName) => {
+export const getOrCreateChat = async (participantIds, isGroup = false, groupName, createdBy) => {
   if (!Array.isArray(participantIds) || participantIds.length < 2) {
     throw new Error('At least two participants are required');
   }
@@ -16,6 +16,7 @@ export const getOrCreateChat = async (participantIds, isGroup = false, groupName
     participants: participantIds,
     isGroup,
     groupName,
+    ...(isGroup && createdBy && { createdBy }),
   });
 
   return chat;

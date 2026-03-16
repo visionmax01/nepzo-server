@@ -79,6 +79,7 @@ export const registerPushToken = async (req, res, next) => {
       throw new ValidationError('Push token is required');
     }
     await savePushToken(req.user.id, token);
+    console.log('[Push] Token registered for user', req.user.id);
     res.json({ success: true });
   } catch (err) {
     next(err);

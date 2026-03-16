@@ -18,6 +18,23 @@ const chatSchema = new Schema(
     groupName: {
       type: String,
     },
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+    },
+    subAdmins: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
+    groupAvatar: {
+      type: String,
+    },
+    groupBio: {
+      type: String,
+      maxlength: 200,
+    },
     lastMessage: {
       type: Schema.Types.ObjectId,
       ref: 'Message',

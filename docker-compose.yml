@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   api:
     build:
@@ -13,6 +11,8 @@ services:
       - PORT=4000
       - MONGODB_URI=mongodb://mongo:27017/nepzo
       - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_BUCKET=nepzo-media
       - CACHE_HOST=redis
       - CACHE_PORT=6379
     depends_on:

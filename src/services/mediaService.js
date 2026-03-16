@@ -54,6 +54,7 @@ const FOLDER_MAP = {
   'chat-image': 'chat-image/',
   'chat-video': 'chat-video/',
   'chat-audio': 'chat-audio/',
+  'chat-file': 'chat-file/',
 };
 
 const getFolderPrefix = (type) => FOLDER_MAP[type] || 'chat-image/';

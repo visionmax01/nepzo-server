@@ -54,9 +54,10 @@ export const registerCallSocket = (io, socket) => {
 
     if (calleeOnline) {
       socket.emit('call_ringing', { calleeId });
-    } else {
-      sendIncomingCallNotification(calleeId, callerName, callType).catch(() => {});
     }
+
+    // Always send push: callee may be "online" (socket connected) but app in background
+    sendIncomingCallNotification(calleeId, callerName, callType).catch(() => {});
   });
 
   socket.on('accept_call', ({ otherUserId }) => {
@@ -79,31 +80,44 @@ export const registerCallSocket = (io, socket) => {
     io.to(`user:${otherUserId}`).emit('ice_candidate', { userId: user.id, candidate });
   });
 
-  socket.on('end_call', async ({ otherUserId, callType, status, durationSeconds, timestamp }) => {
-    const calleeId = otherUserId;
-    const callerId = user.id;
-    const calleeStatus = status === 'answered' ? 'answered' : 'missed';
-    let callerName = 'Unknown';
+  socket.on('end_call', async ({ otherUserId, callType, status, durationSeconds, timestamp, isCaller }) => {
+    const whoEndedIsCaller = isCaller === true;
+    const callerId = whoEndedIsCaller ? user.id : otherUserId;
+    const calleeId = whoEndedIsCaller ? otherUserId : user.id;
+    const answered = status === 'answered';
+    const callerStatus = answered ? 'answered' : 'cancelled';
+    const calleeStatus = answered ? 'answered' : 'missed';
+
+    const remoteUserId = otherUserId;
+    const remoteIsCaller = whoEndedIsCaller ? false : true;
+    const remoteDirection = remoteIsCaller ? 'outgoing' : 'incoming';
+    const remoteStatus = remoteIsCaller ? callerStatus : calleeStatus;
+    const peerId = remoteIsCaller ? calleeId : callerId;
+
+    let peerName = 'Unknown';
+    let peerAvatar = null;
     try {
-      const caller = await User.findById(callerId).select('name avatar').lean();
-      callerName = caller?.name || 'Unknown';
-      await createCallLog(calleeId, {
-        peerId: callerId,
-        peerName: callerName,
-        peerAvatar: caller?.avatar,
+      const peer = await User.findById(peerId).select('name avatar').lean();
+      peerName = peer?.name || 'Unknown';
+      peerAvatar = peer?.avatar ?? null;
+      await createCallLog(remoteUserId, {
+        peerId,
+        peerName,
+        peerAvatar,
         callType: callType || 'voice',
-        direction: 'incoming',
+        direction: remoteDirection,
         durationSeconds: durationSeconds ?? 0,
-        status: calleeStatus,
+        status: remoteStatus,
         timestamp: timestamp || Date.now(),
       });
     } catch (err) {
-      console.error('Failed to create callee call log:', err);
+      console.error('Failed to create call log:', err);
     }
     if (calleeStatus === 'missed') {
-      sendMiscalledNotification(calleeId, callerName).catch(() => {});
+      const caller = await User.findById(callerId).select('name').lean();
+      sendMiscalledNotification(calleeId, caller?.name || 'Unknown').catch(() => {});
     }
-    io.to(`user:${calleeId}`).emit('end_call', { userId: user.id });
+    io.to(`user:${otherUserId}`).emit('end_call', { userId: user.id });
   });
 };
 

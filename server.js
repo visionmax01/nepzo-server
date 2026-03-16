@@ -19,6 +19,11 @@ const start = async () => {
     const server = http.createServer(app);
     initSocket(server);
 
+    // Allow long uploads (50MB) - default 0 means no timeout
+    server.timeout = 0;
+    server.keepAliveTimeout = 65000;
+    server.headersTimeout = 66000;
+
     server.listen(env.port, async () => {
       logger.info(`NepZo backend listening on port ${env.port}`);
       try {

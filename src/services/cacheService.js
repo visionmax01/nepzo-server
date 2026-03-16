@@ -3,7 +3,7 @@ import { cacheClient } from '../config/cache.js';
 const userKey = (id) => `user:${id}`;
 const connectIdKey = (connectId) => `connectId:${connectId}`;
 const friendsKey = (id) => `friends:${id}`;
-const CHATS_CACHE_VERSION = 2;
+const CHATS_CACHE_VERSION = 3;
 const chatsKey = (id) => `chats:v${CHATS_CACHE_VERSION}:${id}`;
 
 export const cacheService = {

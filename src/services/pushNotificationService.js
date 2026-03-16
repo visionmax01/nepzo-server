@@ -1,17 +1,12 @@
-import Expo from 'expo-server-sdk';
+import { getMessaging } from './firebaseAdmin.js';
 import { User } from '../models/User.js';
 import { Message } from '../models/Message.js';
 import { FriendRequest } from '../models/FriendRequest.js';
 
-let expo = null;
-
-const getExpo = () => {
-  if (!expo) {
-    expo = new Expo({
-      accessToken: process.env.EXPO_ACCESS_TOKEN,
-    });
-  }
-  return expo;
+const isFcmToken = (token) => {
+  if (!token || typeof token !== 'string') return false;
+  if (token.startsWith('ExponentPushToken[')) return false;
+  return token.length > 50;
 };
 
 export const getBadgeCountForUser = async (userId) => {
@@ -26,24 +21,46 @@ export const getBadgeCountForUser = async (userId) => {
   }
 };
 
+const stringifyData = (obj) => {
+  const result = {};
+  for (const [k, v] of Object.entries(obj || {})) {
+    result[k] = String(v ?? '');
+  }
+  return result;
+};
+
 const sendPushNotification = async (userId, { title, body, data, channelId }) => {
   try {
     const user = await User.findById(userId).select('pushToken').lean();
     const pushToken = user?.pushToken;
-    if (!pushToken || !Expo.isExpoPushToken(pushToken)) return;
+    if (!pushToken) {
+      console.warn(`[Push] No push token for user ${userId} (${data?.type || 'unknown'})`);
+      return;
+    }
+    if (!isFcmToken(pushToken)) {
+      console.warn(`[Push] Invalid token format for user ${userId} (${data?.type || 'unknown'}) - may be old Expo token`);
+      return;
+    }
+
     const badge = await getBadgeCountForUser(userId);
-    const client = getExpo();
-    await client.sendPushNotificationsAsync([{
-      to: pushToken,
-      title,
-      body,
-      data: { ...data, badge },
-      sound: 'default',
-      channelId: channelId || 'default',
-      badge,
-    }]);
+    const dataPayload = stringifyData({ ...data, badge, channelId: channelId || 'default' });
+
+    const messaging = getMessaging();
+    await messaging.send({
+      token: pushToken,
+      notification: { title, body },
+      data: dataPayload,
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: channelId || 'default',
+          sound: 'default',
+        },
+      },
+    });
+    console.log(`[Push] Sent to user ${userId} (${data?.type || 'unknown'})`);
   } catch (err) {
-    console.error(`Push notification failed (${data?.type || 'unknown'}):`, err);
+    console.error(`[Push] Failed for user ${userId} (${data?.type || 'unknown'}):`, err);
   }
 };
 

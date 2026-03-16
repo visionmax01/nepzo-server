@@ -40,6 +40,10 @@ const messageSchema = new Schema(
       type: String,
       index: true,
     },
+    mediaKeys: {
+      type: [String],
+      default: undefined,
+    },
     messageType: {
       type: String,
       enum: ['text', 'image', 'video', 'audio', 'file'],

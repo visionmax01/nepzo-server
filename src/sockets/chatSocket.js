@@ -6,6 +6,7 @@ import { Block } from '../models/Block.js';
 import { User } from '../models/User.js';
 import { cacheService } from '../services/cacheService.js';
 import { sendMessageNotification } from '../services/pushNotificationService.js';
+import { markGroupChatAsRead } from '../services/messageService.js';
 import { encrypt, decrypt } from '../services/encryptionService.js';
 
 const authenticateSocket = (socket) => {
@@ -74,29 +75,58 @@ export const registerChatSocket = (io, socket) => {
     const { chatId, receiverId, text, mediaUrl, messageType, audioDuration } = payload;
     if (!chatId || (!text && !mediaUrl)) return;
 
-    const blocked = await Block.exists({ blocker: receiverId, blocked: user.id });
-    if (blocked) {
-      socket.emit('you_were_blocked', { blockerId: String(receiverId) });
-      return;
+    const chat = await Chat.findById(chatId).lean();
+    if (!chat) return;
+
+    const isGroup = !!chat.isGroup;
+    const participants = (chat.participants || []).map((p) => p.toString());
+
+    if (isGroup) {
+      const blockedByMe = await Block.find({ blocker: user.id, blocked: { $in: participants } })
+        .select('blocked')
+        .lean();
+      const blockedIds = new Set(blockedByMe.map((b) => String(b.blocked)));
+      if (blockedIds.size > 0) return;
+    } else {
+      const blocked = await Block.exists({ blocker: receiverId, blocked: user.id });
+      if (blocked) {
+        socket.emit('you_were_blocked', { blockerId: String(receiverId) });
+        return;
+      }
     }
 
     const encryptedText = text != null && text !== '' ? encrypt(text) : undefined;
     const encryptedMediaUrl = mediaUrl != null && mediaUrl !== '' ? encrypt(mediaUrl) : undefined;
-    const mediaKey = mediaUrl ? (mediaUrl.match(/^media\/(.+)$/)?.[1] ?? mediaUrl.replace(/^\/+/, '')) : undefined;
+    let mediaKey;
+    let mediaKeys;
+    if (mediaUrl) {
+      try {
+        const parsed = JSON.parse(mediaUrl);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          mediaKeys = parsed.map((u) => (u && u.match(/^media\/(.+)$/)?.[1]) || u.replace(/^\/+/, '')).filter(Boolean);
+          mediaKey = mediaKeys[0];
+        } else {
+          mediaKey = mediaUrl.match(/^media\/(.+)$/)?.[1] ?? mediaUrl.replace(/^\/+/, '');
+        }
+      } catch {
+        mediaKey = mediaUrl.match(/^media\/(.+)$/)?.[1] ?? mediaUrl.replace(/^\/+/, '');
+      }
+    }
 
     const message = await Message.create({
       chat: chatId,
       sender: user.id,
-      receiver: receiverId,
+      receiver: isGroup ? null : receiverId,
       text: encryptedText,
       mediaUrl: encryptedMediaUrl,
       mediaKey,
+      mediaKeys,
       messageType: messageType || (mediaUrl ? 'image' : 'text'),
       audioDuration: audioDuration ?? undefined,
     });
 
     await Chat.findByIdAndUpdate(chatId, { lastMessage: message._id });
-    await cacheService.invalidateChatsForUsers([user.id, receiverId]);
+    await cacheService.invalidateChatsForUsers(participants);
 
     const decryptedText = message.text != null ? decrypt(message.text) : undefined;
     const decryptedMediaUrl = message.mediaUrl != null ? decrypt(message.mediaUrl) : undefined;
@@ -105,7 +135,7 @@ export const registerChatSocket = (io, socket) => {
       id: message.id,
       chatId,
       senderId: user.id,
-      receiverId,
+      receiverId: isGroup ? null : receiverId,
       text: decryptedText,
       mediaUrl: decryptedMediaUrl,
       messageType: message.messageType,
@@ -116,17 +146,29 @@ export const registerChatSocket = (io, socket) => {
 
     io.to(`chat:${chatId}`).emit('receive_message', messagePayload);
 
-    const receiverViewingChat = await isUserViewingChat(io, receiverId, chatId);
-    if (!receiverViewingChat) {
-      io.to(`user:${String(receiverId)}`).emit('receive_message', messagePayload);
+    if (isGroup) {
       const sender = await User.findById(user.id).select('name').lean();
-      sendMessageNotification(
-        receiverId,
-        sender?.name,
-        text,
-        chatId,
-        message.messageType,
-      ).catch(() => {});
+      for (const pid of participants) {
+        if (pid === String(user.id)) continue;
+        const viewing = await isUserViewingChat(io, pid, chatId);
+        if (!viewing) {
+          io.to(`user:${pid}`).emit('receive_message', messagePayload);
+          sendMessageNotification(pid, sender?.name, text, chatId, message.messageType).catch(() => {});
+        }
+      }
+    } else {
+      const receiverViewingChat = await isUserViewingChat(io, receiverId, chatId);
+      if (!receiverViewingChat) {
+        io.to(`user:${String(receiverId)}`).emit('receive_message', messagePayload);
+        const sender = await User.findById(user.id).select('name').lean();
+        sendMessageNotification(
+          receiverId,
+          sender?.name,
+          text,
+          chatId,
+          message.messageType,
+        ).catch(() => {});
+      }
     }
   });
 
@@ -138,17 +180,25 @@ export const registerChatSocket = (io, socket) => {
 
   socket.on('mark_chat_seen', async ({ chatId }) => {
     if (!chatId) return;
-    const toUpdate = await Message.find(
-      { chat: chatId, receiver: user.id, seen: false },
-      { _id: 1 },
-    ).lean();
-    const messageIds = toUpdate.map((m) => m._id?.toString()).filter(Boolean);
-    if (messageIds.length > 0) {
-      await Message.updateMany(
+    const chat = await Chat.findById(chatId).select('isGroup').lean();
+    const isGroup = !!chat?.isGroup;
+
+    if (isGroup) {
+      await markGroupChatAsRead(chatId, user.id);
+      io.to(`chat:${chatId}`).emit('messages_seen', { chatId, userId: user.id });
+    } else {
+      const toUpdate = await Message.find(
         { chat: chatId, receiver: user.id, seen: false },
-        { seen: true },
-      );
-      io.to(`chat:${chatId}`).emit('messages_seen', { messageIds });
+        { _id: 1 },
+      ).lean();
+      const messageIds = toUpdate.map((m) => m._id?.toString()).filter(Boolean);
+      if (messageIds.length > 0) {
+        await Message.updateMany(
+          { chat: chatId, receiver: user.id, seen: false },
+          { seen: true },
+        );
+        io.to(`chat:${chatId}`).emit('messages_seen', { messageIds });
+      }
     }
   });
 };

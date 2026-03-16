@@ -1,5 +1,6 @@
 import { Message } from '../models/Message.js';
 import { Chat } from '../models/Chat.js';
+import { ChatReadState } from '../models/ChatReadState.js';
 import { encrypt, decrypt } from './encryptionService.js';
 
 const extractMediaKey = (mediaUrl) => {
@@ -66,33 +67,64 @@ export const getUnreadCountForChat = async (chatId, receiverUserId) => {
 export const getUnreadCountsForChats = async (chatIds, currentUserId) => {
   if (!chatIds?.length) return {};
   const map = {};
+  const chats = await Chat.find({ _id: { $in: chatIds } }).select('_id isGroup').lean();
+  const chatById = Object.fromEntries(chats.map((c) => [c._id.toString(), c]));
+
   await Promise.all(
     chatIds.map(async (chatId) => {
-      const count = await Message.countDocuments({
-        chat: chatId,
-        receiver: currentUserId,
-        seen: false,
-      });
-      if (count > 0) map[String(chatId)] = count;
+      const chat = chatById[chatId];
+      const isGroup = !!chat?.isGroup;
+
+      if (isGroup) {
+        const readState = await ChatReadState.findOne({ chat: chatId, user: currentUserId }).lean();
+        const lastReadAt = readState?.lastReadAt;
+        const count = await Message.countDocuments({
+          chat: chatId,
+          sender: { $ne: currentUserId },
+          ...(lastReadAt ? { createdAt: { $gt: lastReadAt } } : {}),
+        });
+        if (count > 0) map[String(chatId)] = count;
+      } else {
+        const count = await Message.countDocuments({
+          chat: chatId,
+          receiver: currentUserId,
+          seen: false,
+        });
+        if (count > 0) map[String(chatId)] = count;
+      }
     }),
   );
   return map;
 };
 
+export const markGroupChatAsRead = async (chatId, userId) => {
+  await ChatReadState.findOneAndUpdate(
+    { chat: chatId, user: userId },
+    { lastReadAt: new Date() },
+    { upsert: true, new: true },
+  );
+};
+
 /**
  * Check if the user can access media by key (user must be participant in chat containing the message).
- * @param {string} mediaKey - e.g. "chat-image/123-file.jpg"
+ * Supports single-image (mediaKey) and multi-image (mediaKeys array) messages.
+ * Also supports legacy multi-image messages where mediaKey stored JSON array (backwards compat).
+ * @param {string} key - e.g. "chat-image/123-file.jpg"
  * @param {string} userId
  * @returns {Promise<boolean>}
  */
-export const canUserAccessMedia = async (mediaKey, userId) => {
-  if (!mediaKey || !userId) return false;
-  if (mediaKey.startsWith('profile-image/')) {
+export const canUserAccessMedia = async (key, userId) => {
+  if (!key || !userId) return false;
+  if (key.startsWith('profile-image/')) {
     return true;
   }
-  const mediaUrlLegacy = `media/${mediaKey}`;
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const msg = await Message.findOne({
-    $or: [{ mediaKey }, { mediaUrl: mediaUrlLegacy }],
+    $or: [
+      { mediaKey: key },
+      { mediaKeys: key },
+      { mediaKey: { $regex: escapedKey } },
+    ],
   })
     .populate('chat')
     .lean();

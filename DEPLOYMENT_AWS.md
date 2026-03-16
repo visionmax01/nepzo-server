@@ -17,6 +17,7 @@ Step-by-step guide to deploy the NepZo backend to an AWS EC2 instance with domai
 9. [Environment Variables](#9-environment-variables)
 10. [Post-Deployment Checklist](#10-post-deployment-checklist)
 11. [Maintenance & Updates](#11-maintenance--updates)
+12. [PM2 (Alternative to Docker)](#12-pm2-alternative-to-docker)
 
 ---
 
@@ -131,6 +132,8 @@ sudo apt install -y certbot python3-certbot-nginx
 
 ## 6. Deploy Application (Docker)
 
+Docker Compose runs the API with `restart: unless-stopped`, so the app auto-restarts on crash or reboot. **PM2 is not needed** when using Docker. See [§12 PM2](#12-pm2-alternative-to-docker) if you prefer running Node directly with PM2.
+
 ### Step 6.1: Clone or Upload Your Code
 
 **Option A: Git (recommended)**
@@ -156,11 +159,14 @@ cd /home/ubuntu/nepzo/server
 
 ### Step 6.2: Create Production `.env`
 
+**Important:** The `.env` file is **not** in Git. You must create it manually on the server.
+
 ```bash
+cd ~/nepzo-server   # or your server directory
 nano .env
 ```
 
-Use this template (replace placeholders):
+Paste this template and replace placeholders (all values are required):
 
 ```env
 ########################################
@@ -201,9 +207,10 @@ MINIO_PORT=9000
 MINIO_USE_SSL=false
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=CHANGE_THIS_STRONG_PASSWORD
+MINIO_BUCKET=nepzo-media
 
 ########################################
-# AWS S3 (media backup - optional)
+# AWS S3 (media backup - required by app)
 ########################################
 AWS_REGION=ap-south-1
 AWS_ACCESS_KEY_ID=your-aws-access-key
@@ -242,11 +249,11 @@ Ensure `docker-compose.yml` uses the correct port. Your existing file should wor
 ```bash
 cd /home/ubuntu/nepzo/server
 
-# Build and start all services
-docker compose up -d --build
+# Build and start all services (use sudo if you get "permission denied")
+sudo docker compose up -d --build
 
 # Check status
-docker compose ps
+sudo docker compose ps
 docker compose logs -f api
 ```
 
@@ -279,6 +286,7 @@ Paste (replace `api.nepzo.rentoranepal.com` if your domain differs):
 server {
     listen 80;
     server_name api.nepzo.rentoranepal.com;
+    client_max_body_size 50M;   # Allow file uploads up to 50MB (images, video, audio)
     location / {
         proxy_pass http://127.0.0.1:4000;
         proxy_http_version 1.1;
@@ -304,7 +312,7 @@ sudo systemctl reload nginx
 Test (before SSL):
 
 ```bash
-curl http://api.nepzo.rentoranepal.com/api/health
+curl http://nepzo.rentoranepal.com/api/health
 ```
 
 ---
@@ -314,7 +322,7 @@ curl http://api.nepzo.rentoranepal.com/api/health
 ### Step 8.1: Obtain Certificate
 
 ```bash
-sudo certbot --nginx -d api.nepzo.rentoranepal.com
+sudo certbot --nginx -d nepzo.rentoranepal.com
 ```
 
 - Enter email for renewal notices
@@ -341,6 +349,7 @@ server {
 server {
     listen 443 ssl;
     server_name api.nepzo.rentoranepal.com;
+    client_max_body_size 50M;   # Allow file uploads up to 50MB (images, video, audio)
 
     ssl_certificate /etc/letsencrypt/live/api.nepzo.rentoranepal.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/api.nepzo.rentoranepal.com/privkey.pem;
@@ -464,10 +473,81 @@ docker run --rm -v nepzo_minio_data:/data -v $(pwd):/backup alpine tar czf /back
 
 ---
 
+## 12. PM2 (Alternative to Docker)
+
+If you prefer **not** to use Docker for the Node API, you can run it with **PM2** (process manager). Docker Compose already provides `restart: unless-stopped`, so PM2 is **optional** when using Docker.
+
+### When to use PM2
+
+| Approach | Use when |
+|----------|----------|
+| **Docker** (current) | Simpler setup, all services in one place, easy updates |
+| **PM2** | You want cluster mode, built-in monitoring, or run Node directly on the host |
+
+### Deploy with PM2 (Node only, no Docker for API)
+
+**Prerequisites:** MongoDB, Redis, and MinIO must run separately (Docker for those, or external services like MongoDB Atlas).
+
+#### Step 1: Install PM2
+
+```bash
+sudo npm install -g pm2
+```
+
+#### Step 2: Install dependencies & start
+
+```bash
+cd /home/ubuntu/nepzo-server
+npm install --production
+pm2 start server.js --name nepzo-api
+pm2 save
+pm2 startup   # Enable auto-start on reboot (run the command it outputs)
+```
+
+#### Step 3: PM2 ecosystem file (optional, recommended)
+
+Create `ecosystem.config.cjs` in the server folder:
+
+```javascript
+module.exports = {
+  apps: [{
+    name: 'nepzo-api',
+    script: 'server.js',
+    instances: 1,           // Use 'max' for cluster mode (all CPUs)
+    exec_mode: 'fork',      // Use 'cluster' with instances > 1
+    autorestart: true,
+    watch: false,
+    max_memory_restart: '500M',
+    env: { NODE_ENV: 'production' },
+  }],
+};
+```
+
+Then:
+
+```bash
+pm2 start ecosystem.config.cjs
+pm2 save
+pm2 startup
+```
+
+#### PM2 commands
+
+```bash
+pm2 status              # List processes
+pm2 logs nepzo-api       # View logs
+pm2 restart nepzo-api    # Restart
+pm2 stop nepzo-api       # Stop
+pm2 monit                # Real-time monitoring
+```
+
+---
+
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
+| `permission denied` / `unable to connect to docker API` | Run with `sudo docker compose up -d --build`, or add user: `sudo usermod -aG docker $USER` then **log out and back in** (or `newgrp docker`) |
 | 502 Bad Gateway | Check `docker compose ps` — API container running? Check `docker compose logs api` |
 | Connection refused | Ensure security group allows 80, 443; Nginx is running: `sudo systemctl status nginx` |
 | WebSocket fails | Verify `Upgrade` and `Connection` headers in Nginx config |
