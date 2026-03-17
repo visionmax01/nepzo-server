@@ -48,6 +48,8 @@ Step-by-step guide to deploy the NepZo backend to an AWS EC2 instance with domai
      | SSH    | 22   | Your IP   | SSH access         |
      | HTTP   | 80   | 0.0.0.0/0 | Nginx / Certbot    |
      | HTTPS  | 443  | 0.0.0.0/0 | HTTPS traffic      |
+     | Custom UDP | 3478 | 0.0.0.0/0 | TURN (voice/video calls) |
+     | Custom UDP | 49152-65535 | 0.0.0.0/0 | TURN relay ports |
      | Custom | 4000 | 127.0.0.1| Internal (optional) |
 7. **Storage:** 30 GB gp3 (minimum)
 8. Click **Launch instance**
@@ -223,6 +225,14 @@ S3_BUCKET=your-s3-bucket
 CACHE_ENABLED=true
 CACHE_HOST=redis
 CACHE_PORT=6379
+
+########################################
+# WebRTC TURN (for reliable voice/video calls)
+########################################
+# See TURN_SETUP.md for full instructions
+# TURN_URL=turn:api.nepzo.rentoranepal.com:3478
+# TURN_USERNAME=nepzo_turn
+# TURN_CREDENTIAL=your_strong_password
 
 ########################################
 # Push Notifications (Expo)
@@ -422,6 +432,7 @@ For Expo/React Native, `*` or `exp://*` is often used during development.
 ## 10. Post-Deployment Checklist
 
 - [ ] `https://api.nepzo.rentoranepal.com/api/health` returns `{"status":"ok"}`
+- [ ] **TURN server** (optional but recommended for reliable calls): See [TURN_SETUP.md](./TURN_SETUP.md)
 - [ ] Mobile app can reach the API
 - [ ] Google Sign-In works (ensure OAuth redirect URIs include your domain if needed)
 - [ ] Socket.io/WebSocket connects (chat, presence, etc.)

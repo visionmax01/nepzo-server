@@ -60,5 +60,11 @@ export const env = {
     connectTimeoutMs: Number(process.env.CACHE_CONNECT_TIMEOUT_MS) || 5000,
     useTls: process.env.CACHE_USE_TLS === 'true',
   },
+
+  webrtc: {
+    turnUrl: process.env.TURN_URL || undefined,
+    turnUsername: process.env.TURN_USERNAME || undefined,
+    turnCredential: process.env.TURN_CREDENTIAL || undefined,
+  },
 };
 

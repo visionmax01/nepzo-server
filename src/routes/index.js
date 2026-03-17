@@ -8,6 +8,7 @@ import { uploadRouter } from './uploadRoutes.js';
 import { callRouter } from './callRoutes.js';
 import { userRouter } from './userRoutes.js';
 import { blockRouter } from './blockRoutes.js';
+import { configRouter } from './configRoutes.js';
 
 const router = express.Router();
 
@@ -21,6 +22,7 @@ router.get('/auth/notifications/badge', authMiddleware, async (req, res) => {
 });
 
 router.use('/auth', authRouter);
+router.use('/', configRouter);
 router.use('/', uploadRouter);
 router.use('/', friendRouter);
 router.use('/', messageRouter);
