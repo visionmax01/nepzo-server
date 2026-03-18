@@ -36,6 +36,7 @@ export const verifyGoogleToken = async (idToken) => {
 
 export const findOrCreateUser = async ({ email, name, googleId, avatar }) => {
   let user = await User.findOne({ email });
+  let isNewUser = false;
   if (!user) {
     const connectId = await User.generateUniqueConnectId();
     user = await User.create({
@@ -45,9 +46,9 @@ export const findOrCreateUser = async ({ email, name, googleId, avatar }) => {
       avatar,
       connectId,
     });
+    isNewUser = true;
   }
-
-  return user;
+  return { user, isNewUser };
 };
 
 export const createUserWithPassword = async ({ name, email, password }) => {

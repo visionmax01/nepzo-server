@@ -9,6 +9,8 @@ COPY . .
 
 FROM node:20-alpine AS production
 
+RUN apk add --no-cache curl
+
 ENV NODE_ENV=production
 WORKDIR /app
 

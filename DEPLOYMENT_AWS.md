@@ -230,9 +230,9 @@ CACHE_PORT=6379
 # WebRTC TURN (for reliable voice/video calls)
 ########################################
 # See TURN_SETUP.md for full instructions
-# TURN_URL=turn:api.nepzo.rentoranepal.com:3478
-# TURN_USERNAME=nepzo_turn
-# TURN_CREDENTIAL=your_strong_password
+TURN_URL=turn:nepzo.rentoranepal.com:3478
+TURN_USERNAME=nepzo_turn
+TURN_CREDENTIAL=NepZo@505598
 
 ########################################
 # Push Notifications (Expo)
@@ -439,6 +439,24 @@ For Expo/React Native, `*` or `exp://*` is often used during development.
 - [ ] File uploads work (MinIO)
 - [ ] MongoDB has data persistence (Docker volume `mongo_data`)
 - [ ] Redis and MinIO are running: `docker compose ps`
+- [ ] **Auto-restart on failure** configured (see below)
+
+### Auto-restart & connection recovery
+
+To avoid connection loss when the server or API fails:
+
+**If using Docker:**
+- API container uses `restart: always` — restarts on crash and server reboot
+- Healthcheck pings `/api/health` every 30s — restarts if API becomes unresponsive
+- Ensure Docker starts on boot: `sudo systemctl enable docker`
+
+**If using PM2 (no Docker for API):**
+```bash
+pm2 start ecosystem.config.cjs
+pm2 save                    # Save process list
+pm2 startup                 # Run the command it outputs (enables boot start)
+```
+PM2 will auto-restart the app on crash and on server reboot.
 
 ---
 
@@ -486,7 +504,7 @@ docker run --rm -v nepzo_minio_data:/data -v $(pwd):/backup alpine tar czf /back
 
 ## 12. PM2 (Alternative to Docker)
 
-If you prefer **not** to use Docker for the Node API, you can run it with **PM2** (process manager). Docker Compose already provides `restart: unless-stopped`, so PM2 is **optional** when using Docker.
+If you prefer **not** to use Docker for the Node API, you can run it with **PM2** (process manager). Docker Compose uses `restart: always` and a healthcheck for the API, so PM2 is **optional** when using Docker.
 
 ### When to use PM2
 
@@ -517,29 +535,12 @@ pm2 startup   # Enable auto-start on reboot (run the command it outputs)
 
 #### Step 3: PM2 ecosystem file (optional, recommended)
 
-Create `ecosystem.config.cjs` in the server folder:
-
-```javascript
-module.exports = {
-  apps: [{
-    name: 'nepzo-api',
-    script: 'server.js',
-    instances: 1,           // Use 'max' for cluster mode (all CPUs)
-    exec_mode: 'fork',      // Use 'cluster' with instances > 1
-    autorestart: true,
-    watch: false,
-    max_memory_restart: '500M',
-    env: { NODE_ENV: 'production' },
-  }],
-};
-```
-
-Then:
+Use the existing `ecosystem.config.cjs` (includes autorestart, restart_delay for crash recovery):
 
 ```bash
 pm2 start ecosystem.config.cjs
 pm2 save
-pm2 startup
+pm2 startup   # Run the command it outputs — enables auto-start on server reboot
 ```
 
 #### PM2 commands

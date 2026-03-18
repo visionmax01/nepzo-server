@@ -63,11 +63,11 @@ export const getChats = async (req, res, next) => {
     if (cached && Array.isArray(cached)) {
       const chatIds = cached.map((c) => (c.id || c._id?.toString())).filter(Boolean);
       const unreadMap = chatIds.length ? await getUnreadCountsForChats(chatIds, currentUserId) : {};
+      // Cached data is already formatted; only merge fresh unreadCount and decrypt lastMessage
       const formatted = cached.map((c) => {
-        const base = c.receiverId ? c : formatChatForClient(c, currentUserId, 0);
-        const chatId = base.id || c._id?.toString();
-        const lastMessage = base.lastMessage ? decryptLastMessage(base.lastMessage) : null;
-        return { ...base, lastMessage, unreadCount: unreadMap[chatId] ?? base.unreadCount ?? 0 };
+        const chatId = c.id || c._id?.toString();
+        const lastMessage = c.lastMessage ? decryptLastMessage(c.lastMessage) : null;
+        return { ...c, lastMessage, unreadCount: unreadMap[chatId] ?? c.unreadCount ?? 0 };
       });
       res.set('x-cache', 'HIT');
       res.json({ success: true, chats: formatted, cached: true });
@@ -101,6 +101,14 @@ export const createGroupChat = async (req, res, next) => {
 
     const currentUserId = req.user.id;
     const participantIds = [...new Set([currentUserId.toString(), ...rawIds.map(String)])];
+
+    const myGroupCount = await Chat.countDocuments({
+      isGroup: true,
+      participants: currentUserId,
+    });
+    if (myGroupCount >= 10) {
+      throw new ValidationError('You can create up to 10 groups. Delete an existing group to create a new one.');
+    }
 
     for (const pid of participantIds) {
       if (pid === currentUserId.toString()) continue;

@@ -5,12 +5,15 @@ export const getOrCreateChat = async (participantIds, isGroup = false, groupName
     throw new Error('At least two participants are required');
   }
 
-  const existing = await Chat.findOne({
-    isGroup,
-    participants: { $all: participantIds, $size: participantIds.length },
-  });
-
-  if (existing) return existing;
+  // For groups: always create new (allow multiple groups with same friends)
+  // For DMs: return existing if found
+  if (!isGroup) {
+    const existing = await Chat.findOne({
+      isGroup: false,
+      participants: { $all: participantIds, $size: participantIds.length },
+    });
+    if (existing) return existing;
+  }
 
   const chat = await Chat.create({
     participants: participantIds,

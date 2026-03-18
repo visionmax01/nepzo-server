@@ -21,13 +21,14 @@ export const googleAuth = async (req, res, next) => {
   try {
     const { idToken } = req.body;
     const googleProfile = await verifyGoogleToken(idToken);
-    const user = await findOrCreateUser(googleProfile);
+    const { user, isNewUser } = await findOrCreateUser(googleProfile);
     const token = generateJwt(user);
 
     res.json({
       success: true,
       token,
       user: serializeUser(user),
+      isNewUser,
     });
   } catch (err) {
     next(err);
@@ -47,6 +48,7 @@ export const signup = async (req, res, next) => {
       success: true,
       token,
       user: serializeUser(user),
+      isNewUser: true,
     });
   } catch (err) {
     next(err);

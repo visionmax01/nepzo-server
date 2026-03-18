@@ -1,4 +1,5 @@
 import { User } from '../models/User.js';
+import { FriendRequest } from '../models/FriendRequest.js';
 import { deleteObject } from '../services/mediaService.js';
 import { cacheService } from '../services/cacheService.js';
 import { Friendship } from '../models/Friendship.js';
@@ -61,6 +62,29 @@ export const searchByConnectId = async (req, res, next) => {
     }
     await cacheService.setUserByConnectId(trimmed, user);
 
+    const currentUserId = req.user.id;
+    const targetUserId = user._id.toString();
+    if (currentUserId === targetUserId) {
+      return res.json({
+        success: true,
+        user: {
+          id: user._id.toString(),
+          name: user.name,
+          connectId: user.connectId,
+          avatar: user.avatar,
+          status: user.status,
+        },
+      });
+    }
+
+    const incomingRequest = await FriendRequest.findOne({
+      from: user._id,
+      to: currentUserId,
+      status: 'pending',
+    })
+      .select('_id')
+      .lean();
+
     return res.json({
       success: true,
       user: {
@@ -69,6 +93,10 @@ export const searchByConnectId = async (req, res, next) => {
         connectId: user.connectId,
         avatar: user.avatar,
         status: user.status,
+        ...(incomingRequest && {
+          incomingRequestId: incomingRequest._id.toString(),
+          hasIncomingRequest: true,
+        }),
       },
     });
   } catch (err) {
