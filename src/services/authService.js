@@ -100,3 +100,7 @@ export const savePushToken = async (userId, token) => {
   await User.findByIdAndUpdate(userId, { pushToken: token });
 };
 
+export const removePushToken = async (userId) => {
+  await User.findByIdAndUpdate(userId, { $unset: { pushToken: 1 } });
+};
+

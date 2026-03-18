@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 
-dotenv.config({ debug: true });
+dotenv.config();
 
 const required = (name, fallback) => {
   const value = process.env[name] ?? fallback;

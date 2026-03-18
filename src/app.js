@@ -7,7 +7,6 @@ import { env } from './config/env.js';
 import { securityHeaders } from './middleware/securityHeaders.js';
 import { errorMiddleware } from './middleware/errorMiddleware.js';
 import { routes } from './routes/index.js';
-import { logger } from './utils/logger.js';
 
 const app = express();
 
@@ -25,12 +24,6 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(morgan('dev'));
 
 app.use((req, res, next) => {
-  logger.debug('Incoming request', {
-    method: req.method,
-    url: req.originalUrl,
-    query: req.query,
-    body: req.body,
-  });
   next();
 });
 

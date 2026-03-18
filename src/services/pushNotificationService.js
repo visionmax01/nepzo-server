@@ -29,21 +29,53 @@ const stringifyData = (obj) => {
   return result;
 };
 
+const sendIncomingCallPush = async (userId, data) => {
+  try {
+    const user = await User.findById(userId).select('pushToken').lean();
+    const pushToken = user?.pushToken;
+    if (!pushToken) return;
+    if (!isFcmToken(pushToken)) return;
+    const badge = await getBadgeCountForUser(userId);
+    const dataPayload = stringifyData({ ...data, badge, channelId: 'incoming_call' });
+    const typeLabel = data.callType === 'video' ? 'Video' : 'Voice';
+    const messaging = getMessaging();
+    await messaging.send({
+      token: pushToken,
+      notification: {
+        title: 'Incoming Call',
+        body: `${data.callerName || 'Unknown'} is calling you (${typeLabel})`,
+      },
+      data: dataPayload,
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: 'incoming_call',
+          sound: 'default',
+        },
+      },
+    });
+  } catch (err) {
+    const code = err?.errorInfo?.code || err?.code;
+    const invalidTokenCodes = [
+      'messaging/registration-token-not-registered',
+      'messaging/invalid-registration-token',
+    ];
+    if (invalidTokenCodes.includes(code)) {
+      await User.findByIdAndUpdate(userId, { $unset: { pushToken: 1 } });
+    }
+  }
+};
+
 const sendPushNotification = async (userId, { title, body, data, channelId }) => {
   try {
     const user = await User.findById(userId).select('pushToken').lean();
     const pushToken = user?.pushToken;
-    if (!pushToken) {
-      console.warn(`[Push] No push token for user ${userId} (${data?.type || 'unknown'})`);
-      return;
-    }
-    if (!isFcmToken(pushToken)) {
-      console.warn(`[Push] Invalid token format for user ${userId} (${data?.type || 'unknown'}) - may be old Expo token`);
-      return;
-    }
+    if (!pushToken) return;
+    if (!isFcmToken(pushToken)) return;
 
     const badge = await getBadgeCountForUser(userId);
-    const dataPayload = stringifyData({ ...data, badge, channelId: channelId || 'default' });
+    const effectiveChannelId = channelId === 'messages' ? 'messages_v2' : 'default_v2';
+    const dataPayload = stringifyData({ ...data, badge, channelId: effectiveChannelId });
 
     const messaging = getMessaging();
     await messaging.send({
@@ -53,14 +85,20 @@ const sendPushNotification = async (userId, { title, body, data, channelId }) =>
       android: {
         priority: 'high',
         notification: {
-          channelId: channelId || 'default',
+          channelId: effectiveChannelId,
           sound: 'default',
         },
       },
     });
-    console.log(`[Push] Sent to user ${userId} (${data?.type || 'unknown'})`);
   } catch (err) {
-    console.error(`[Push] Failed for user ${userId} (${data?.type || 'unknown'}):`, err);
+    const code = err?.errorInfo?.code || err?.code;
+    const invalidTokenCodes = [
+      'messaging/registration-token-not-registered',
+      'messaging/invalid-registration-token',
+    ];
+    if (invalidTokenCodes.includes(code)) {
+      await User.findByIdAndUpdate(userId, { $unset: { pushToken: 1 } });
+    }
   }
 };
 
@@ -111,11 +149,14 @@ export const sendFriendRequestNotification = async (targetUserId, fromUserName) 
   });
 };
 
-export const sendIncomingCallNotification = async (calleeId, callerName, callType) => {
+export const sendIncomingCallNotification = async (calleeId, callerId, callerName, callType, callerAvatar = null) => {
   const typeLabel = callType === 'video' ? 'video' : 'voice';
-  await sendPushNotification(calleeId, {
-    title: 'Incoming Call',
-    body: `${callerName || 'Someone'} is calling you (${typeLabel})`,
-    data: { type: 'incoming_call', callerName: callerName || 'Unknown', callType: typeLabel },
-  });
+  const data = {
+    type: 'incoming_call',
+    callerId: callerId || '',
+    callerName: callerName || 'Unknown',
+    callType: typeLabel,
+    callerAvatar: callerAvatar ?? '',
+  };
+  await sendIncomingCallPush(calleeId, data);
 };

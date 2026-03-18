@@ -229,10 +229,11 @@ CACHE_PORT=6379
 ########################################
 # WebRTC TURN (for reliable voice/video calls)
 ########################################
-# See TURN_SETUP.md for full instructions
-TURN_URL=turn:nepzo.rentoranepal.com:3478
+# See TURN_SETUP.md for full instructions. Coturn runs via docker-compose.
+TURN_URL=turn:api.nepzo.rentoranepal.com:3478
 TURN_USERNAME=nepzo_turn
-TURN_CREDENTIAL=NepZo@505598
+TURN_CREDENTIAL=your_strong_password_here
+TURN_REALM=api.nepzo.rentoranepal.com
 
 ########################################
 # Push Notifications (Expo)
@@ -252,19 +253,21 @@ openssl rand -hex 48
 
 ### Step 6.3: Update `docker-compose.yml` for Production
 
-Ensure `docker-compose.yml` uses the correct port. Your existing file should work. If the API port differs, set `PORT=4000` in `.env`.
+Ensure `docker-compose.yml` uses the correct port. Your existing file should work. If the API port differs, set `PORT=4000` in `.env`. Coturn (TURN server) is included and starts with the API — see [TURN_SETUP.md](./TURN_SETUP.md) Option D.
 
 ### Step 6.4: Build and Run
 
 ```bash
 cd /home/ubuntu/nepzo/server
 
-# Build and start all services (use sudo if you get "permission denied")
+# Build and start all services (API, MongoDB, MinIO, Redis, Coturn)
+# Use sudo if you get "permission denied"
 sudo docker compose up -d --build
 
 # Check status
 sudo docker compose ps
 docker compose logs -f api
+docker compose logs coturn   # TURN server for voice/video calls
 ```
 
 Verify the API responds:
@@ -468,6 +471,7 @@ PM2 will auto-restart the app on crash and on server reboot.
 cd /home/ubuntu/nepzo/server
 docker compose logs -f api
 docker compose logs -f mongo
+docker compose logs coturn   # TURN server for voice/video calls
 ```
 
 ### Restart Services

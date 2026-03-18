@@ -59,8 +59,7 @@ export const registerChatSocket = (io, socket) => {
         { upsert: true, new: true },
       );
       io.to(`user:${bid}`).emit('you_were_blocked', { blockerId: String(user.id) });
-    } catch (err) {
-      console.error('block_user error:', err);
+    } catch {
     }
   });
 

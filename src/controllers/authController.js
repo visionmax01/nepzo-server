@@ -5,11 +5,12 @@ import {
   createUserWithPassword,
   loginWithPassword,
   savePushToken,
+  removePushToken,
 } from '../services/authService.js';
 import { ValidationError } from '../utils/errorTypes.js';
 
 const serializeUser = (user) => ({
-  id: user.id,
+  id: user.id || user._id?.toString(),
   name: user.name,
   email: user.email,
   connectId: user.connectId,
@@ -81,7 +82,15 @@ export const registerPushToken = async (req, res, next) => {
       throw new ValidationError('Push token is required');
     }
     await savePushToken(req.user.id, token);
-    console.log('[Push] Token registered for user', req.user.id);
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const unregisterPushToken = async (req, res, next) => {
+  try {
+    await removePushToken(req.user.id);
     res.json({ success: true });
   } catch (err) {
     next(err);

@@ -180,6 +180,46 @@ TURN_CREDENTIAL=your_twilio_credential
 
 ---
 
+## Option D: Coturn via Docker Compose (Recommended for EC2)
+
+Coturn runs as a Docker service alongside the API. Uses `network_mode: host` and auto-detects external IP on EC2.
+
+### 1. Open AWS Security Group Ports
+
+Same as Option A — add inbound rules for UDP 3478 and 49152-65535.
+
+### 2. Configure `.env`
+
+Add to your server `.env` (see `.env.example`):
+
+```env
+TURN_URL=turn:api.nepzo.rentoranepal.com:3478
+TURN_USERNAME=nepzo_turn
+TURN_CREDENTIAL=your_strong_password_here
+TURN_REALM=api.nepzo.rentoranepal.com
+```
+
+Generate a strong password: `openssl rand -hex 16`
+
+### 3. Start Services
+
+```bash
+cd /home/ubuntu/nepzo/server
+docker compose up -d --build
+```
+
+Coturn starts with the API. It auto-detects the EC2 external IP via `DETECT_EXTERNAL_IP=yes`.
+
+### 4. Verify
+
+```bash
+docker compose logs coturn
+```
+
+**Note:** `network_mode: host` requires Linux (e.g. EC2). On Docker Desktop for Mac/Windows, Coturn will not work — use Option A (host install) or Option C (third-party) for local dev.
+
+---
+
 ## Verify It Works
 
 1. **Check coturn is running:**
@@ -213,6 +253,7 @@ TURN_CREDENTIAL=your_twilio_credential
 |--------------|---------|
 | `TURN_URL` | `turn:api.nepzo.rentoranepal.com:3478` |
 | `TURN_USERNAME` | `nepzo_turn` |
-| `TURN_CREDENTIAL` | (strong password from `user=` in turnserver.conf) |
+| `TURN_CREDENTIAL` | (strong password) |
+| `TURN_REALM` | `api.nepzo.rentoranepal.com` (optional, for Docker Compose) |
 
 Your `configController.js` serves these to the mobile app via `GET /api/config/webrtc`. The app uses them automatically when establishing WebRTC connections.

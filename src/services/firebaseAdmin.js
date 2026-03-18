@@ -13,7 +13,6 @@ const getServiceAccount = () => {
       const json = JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
       return json;
     } catch (e) {
-      console.error('[Firebase] Invalid FIREBASE_SERVICE_ACCOUNT_JSON_B64');
       throw e;
     }
   }

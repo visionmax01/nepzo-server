@@ -4,7 +4,6 @@ import { User } from '../models/User.js';
 import { Block } from '../models/Block.js';
 import { createCallLog } from '../services/callLogService.js';
 import { sendMiscalledNotification, sendIncomingCallNotification } from '../services/pushNotificationService.js';
-import { isUserOnline } from '../config/socket.js';
 
 const authenticateSocket = (socket) => {
   const token = socket.handshake.auth?.token || socket.handshake.query?.token;
@@ -40,10 +39,7 @@ export const registerCallSocket = (io, socket) => {
       callerName = caller?.name || 'Unknown';
       callerAvatar = caller?.avatar ?? null;
     } catch (err) {
-      console.error('Failed to fetch caller for incoming_call:', err);
     }
-
-    const calleeOnline = await isUserOnline(calleeId);
 
     io.to(`user:${calleeId}`).emit('incoming_call', {
       callerId: user.id,
@@ -52,12 +48,11 @@ export const registerCallSocket = (io, socket) => {
       callerAvatar,
     });
 
-    if (calleeOnline) {
-      socket.emit('call_ringing', { calleeId });
-    }
+    // Always emit call_ringing so caller gets ringing feedback (callee may be reached via push when app in background)
+    socket.emit('call_ringing', { calleeId });
 
     // Always send push: callee may be "online" (socket connected) but app in background
-    sendIncomingCallNotification(calleeId, callerName, callType).catch(() => {});
+    sendIncomingCallNotification(calleeId, user.id, callerName, callType, callerAvatar).catch(() => {});
   });
 
   socket.on('accept_call', ({ otherUserId }) => {
@@ -111,7 +106,6 @@ export const registerCallSocket = (io, socket) => {
         timestamp: timestamp || Date.now(),
       });
     } catch (err) {
-      console.error('Failed to create call log:', err);
     }
     if (calleeStatus === 'missed') {
       const caller = await User.findById(callerId).select('name').lean();
