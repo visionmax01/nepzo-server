@@ -44,6 +44,9 @@ export const getWebRTCConfig = async (req, res) => {
       });
     }
 
+    // Mobile clients must always receive a JSON body; CDNs/proxies may otherwise return 304 with no body.
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
     res.json({ iceServers });
   } catch (err) {
     res.status(500).json({
