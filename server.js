@@ -26,6 +26,16 @@ const start = async () => {
 
     server.listen(env.port, async () => {
       logger.info(`NepZo backend listening on port ${env.port}`);
+      const { turnUrl, turnUsername, turnCredential } = env.webrtc || {};
+      if (process.env.NODE_ENV === 'production') {
+        if (!turnUrl || !turnUsername || !turnCredential) {
+          logger.warn(
+            'WebRTC TURN is not fully configured (TURN_URL / TURN_USERNAME / TURN_CREDENTIAL). Voice/video calls may fail on mobile data or restrictive networks.',
+          );
+        } else {
+          logger.info('WebRTC TURN relay is configured for ICE.');
+        }
+      }
       try {
         const { encrypt } = await import('./src/services/encryptionService.js');
         const test = encrypt('test');

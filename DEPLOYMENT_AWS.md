@@ -236,6 +236,15 @@ TURN_CREDENTIAL=your_strong_password_here
 TURN_REALM=api.nepzo.rentoranepal.com
 
 ########################################
+# Firebase (push notifications - required for FCM)
+########################################
+# Option A: File path (cert must exist at src/certs/ on server - see Step 6.2b)
+FIREBASE_SERVICE_ACCOUNT_PATH=./src/certs/nepzo-21619-firebase-adminsdk.json
+
+# Option B: Base64 (if you prefer not to copy the cert file)
+# FIREBASE_SERVICE_ACCOUNT_JSON_B64=<base64-encoded-json>
+
+########################################
 # Push Notifications (Expo)
 ########################################
 EXPO_ACCESS_TOKEN=your-expo-access-token
@@ -249,6 +258,31 @@ openssl rand -hex 32
 
 # Generate JWT_SECRET
 openssl rand -hex 48
+```
+
+### Step 6.2b: Firebase cert for push notifications
+
+The Firebase service account JSON is **not** in Git. Copy it to the server so Docker can mount it:
+
+```bash
+# On your local machine - create certs dir and copy the cert
+scp -i "your-key.pem" server/src/certs/nepzo-21619-firebase-adminsdk.json ubuntu@YOUR_ELASTIC_IP:~/nepzo-server/src/certs/
+```
+
+On the server, ensure the certs directory exists:
+
+```bash
+mkdir -p ~/nepzo-server/src/certs
+# Then copy the cert via SCP (see above)
+```
+
+**Alternative:** Use `FIREBASE_SERVICE_ACCOUNT_JSON_B64` in `.env` instead of the file (see [README-FIREBASE.md](./src/certs/README-FIREBASE.md)). Base64-encode the JSON and add it to `.env` on the server:
+
+```bash
+# From your local machine (Linux/Mac)
+base64 -w 0 server/src/certs/nepzo-21619-firebase-adminsdk.json
+# Add to .env: FIREBASE_SERVICE_ACCOUNT_JSON_B64=<paste_output>
+# Comment out FIREBASE_SERVICE_ACCOUNT_PATH if using base64
 ```
 
 ### Step 6.3: Update `docker-compose.yml` for Production
@@ -435,6 +469,7 @@ For Expo/React Native, `*` or `exp://*` is often used during development.
 ## 10. Post-Deployment Checklist
 
 - [ ] `https://api.nepzo.rentoranepal.com/api/health` returns `{"status":"ok"}`
+- [ ] **Push notifications**: Firebase cert at `src/certs/nepzo-21619-firebase-adminsdk.json` (or `FIREBASE_SERVICE_ACCOUNT_JSON_B64` in `.env`)
 - [ ] **TURN server** (optional but recommended for reliable calls): See [TURN_SETUP.md](./TURN_SETUP.md)
 - [ ] Mobile app can reach the API
 - [ ] Google Sign-In works (ensure OAuth redirect URIs include your domain if needed)

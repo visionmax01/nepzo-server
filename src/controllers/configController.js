@@ -6,6 +6,16 @@ const DEFAULT_STUN_SERVERS = [
   { urls: 'stun:stun2.l.google.com:19302' },
 ];
 
+/** Add explicit TCP transport alongside default (UDP) for restrictive networks. */
+const turnUrlsWithTcp = (turnUrl) => {
+  if (!turnUrl) return [];
+  if (turnUrl.includes('transport=')) {
+    return [turnUrl];
+  }
+  const tcp = turnUrl.includes('?') ? `${turnUrl}&transport=tcp` : `${turnUrl}?transport=tcp`;
+  return [turnUrl, tcp];
+};
+
 export const getWebRTCConfig = async (req, res) => {
   try {
     const iceServers = [...DEFAULT_STUN_SERVERS];
@@ -14,9 +24,21 @@ export const getWebRTCConfig = async (req, res) => {
     const turnUsername = env.webrtc?.turnUsername;
     const turnCredential = env.webrtc?.turnCredential;
 
-    if (turnUrl && turnUsername && turnCredential) {
+    const turnReady = !!(turnUrl && turnUsername && turnCredential);
+    if (process.env.NODE_ENV !== 'production') {
+      if (turnReady) {
+        console.log('[WebRTC] TURN relay enabled (STUN + TURN in ICE config)');
+      } else {
+        console.warn(
+          '[WebRTC] TURN not configured (TURN_URL / TURN_USERNAME / TURN_CREDENTIAL) — calls may fail on mobile data or symmetric NAT',
+        );
+      }
+    }
+
+    if (turnReady) {
+      const urls = turnUrlsWithTcp(turnUrl);
       iceServers.push({
-        urls: turnUrl,
+        urls,
         username: turnUsername,
         credential: turnCredential,
       });
