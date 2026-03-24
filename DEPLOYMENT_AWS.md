@@ -48,8 +48,9 @@ Step-by-step guide to deploy the NepZo backend to an AWS EC2 instance with domai
      | SSH    | 22   | Your IP   | SSH access         |
      | HTTP   | 80   | 0.0.0.0/0 | Nginx / Certbot    |
      | HTTPS  | 443  | 0.0.0.0/0 | HTTPS traffic      |
-     | Custom UDP | 3478 | 0.0.0.0/0 | TURN (voice/video calls) |
-     | Custom UDP | 49152-65535 | 0.0.0.0/0 | TURN relay ports |
+     | Custom UDP | 3478 | 0.0.0.0/0 | TURN (voice/video — STUN bindings) |
+     | Custom TCP | 3478 | 0.0.0.0/0 | TURN over TCP (`?transport=tcp` fallback; required for many mobile/Wi‑Fi networks) |
+     | Custom UDP | 49152-65535 | 0.0.0.0/0 | TURN relay ports (media). **Omitting this is a common cause of cross‑network call failures.** |
      | Custom | 4000 | 127.0.0.1| Internal (optional) |
 7. **Storage:** 30 GB gp3 (minimum)
 8. Click **Launch instance**
@@ -229,11 +230,15 @@ CACHE_PORT=6379
 ########################################
 # WebRTC TURN (for reliable voice/video calls)
 ########################################
-# See TURN_SETUP.md for full instructions. Coturn runs via docker-compose.
-TURN_URL=turn:api.nepzo.rentoranepal.com:3478
+# See TURN_SETUP.md. Coturn uses host network + scripts/turnserver-entrypoint.sh.
+# If the API hostname is Cloudflare-proxied, use your Elastic IP in TURN_URL (HTTPS proxy does not carry TURN).
+# TURN_EXTERNAL_IP / TURN_PRIVATE_IP: from EC2 metadata or `hostname -I` — required for correct relay candidates.
+TURN_URL=turn:13.127.202.45:3478
 TURN_USERNAME=nepzo_turn
 TURN_CREDENTIAL=your_strong_password_here
-TURN_REALM=api.nepzo.rentoranepal.com
+TURN_REALM=nepzo.rentoranepal.com
+TURN_EXTERNAL_IP=13.127.202.45
+TURN_PRIVATE_IP=YOUR_EC2_PRIVATE_IP
 
 ########################################
 # Firebase (push notifications - required for FCM)

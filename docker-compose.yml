@@ -57,6 +57,8 @@ services:
       - "6379:6379"
     restart: unless-stopped
 
+  # Uses host network: port 3478 is on the VM. Do not run `apt install coturn` + systemd on the same host
+  # or both will bind 3478. If needed: sudo systemctl stop coturn && sudo systemctl disable coturn
   coturn:
     image: coturn/coturn:latest
     network_mode: host
@@ -64,17 +66,10 @@ services:
     env_file:
       - ./.env
     environment:
-      DETECT_EXTERNAL_IP: "yes"
-      DETECT_RELAY_IP: "yes"
-      TURN_REALM: ${TURN_REALM:-api.nepzo.rentoranepal.com}
-    command:
-      - -n
-      - --log-file=stdout
-      - --realm=${TURN_REALM:-api.nepzo.rentoranepal.com}
-      - --user=${TURN_USERNAME}:${TURN_CREDENTIAL}
-      - --min-port=49152
-      - --max-port=65535
-      - --no-tls
+      TURN_REALM: ${TURN_REALM:-api.growlitenepal.com}
+    volumes:
+      - ./scripts/turnserver-entrypoint.sh:/scripts/turnserver-entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/scripts/turnserver-entrypoint.sh"]
 
 volumes:
   mongo_data:

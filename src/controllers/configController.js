@@ -1,4 +1,5 @@
 import { env } from '../config/env.js';
+import { logger } from '../utils/logger.js';
 
 const DEFAULT_STUN_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -25,13 +26,17 @@ export const getWebRTCConfig = async (req, res) => {
     const turnCredential = env.webrtc?.turnCredential;
 
     const turnReady = !!(turnUrl && turnUsername && turnCredential);
-    if (process.env.NODE_ENV !== 'production') {
-      if (turnReady) {
+    if (turnReady) {
+      if (process.env.NODE_ENV !== 'production') {
         console.log('[WebRTC] TURN relay enabled (STUN + TURN in ICE config)');
+      }
+    } else {
+      const msg =
+        'WebRTC TURN not configured (TURN_URL / TURN_USERNAME / TURN_CREDENTIAL). Cross-network calls will fail.';
+      if (process.env.NODE_ENV === 'production') {
+        logger.warn(msg);
       } else {
-        console.warn(
-          '[WebRTC] TURN not configured (TURN_URL / TURN_USERNAME / TURN_CREDENTIAL) — calls may fail on mobile data or symmetric NAT',
-        );
+        console.warn(`[WebRTC] ${msg}`);
       }
     }
 

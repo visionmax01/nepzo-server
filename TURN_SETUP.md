@@ -182,22 +182,28 @@ TURN_CREDENTIAL=your_twilio_credential
 
 ## Option D: Coturn via Docker Compose (Recommended for EC2)
 
-Coturn runs as a Docker service alongside the API. Uses `network_mode: host` and auto-detects external IP on EC2.
+Coturn runs as a Docker service alongside the API using `network_mode: host` and [`scripts/turnserver-entrypoint.sh`](scripts/turnserver-entrypoint.sh).
 
 ### 1. Open AWS Security Group Ports
 
-Same as Option A — add inbound rules for UDP 3478 and 49152-65535.
+- **UDP 3478** — TURN/STUN
+- **TCP 3478** — TURN over TCP (required for [`?transport=tcp`](src/controllers/configController.js) fallback; many mobile networks block UDP)
+- **UDP 49152–65535** — relay ports (without this, signaling works but **no media** across NATs)
 
 ### 2. Configure `.env`
 
-Add to your server `.env` (see `.env.example`):
+Add to your server `.env` (see `.env.example`). **Use your Elastic IP in `TURN_URL`** if your API domain is Cloudflare-proxied or does not point UDP to this instance — HTTPS reverse proxy does **not** relay TURN.
 
 ```env
-TURN_URL=turn:api.nepzo.rentoranepal.com:3478
+TURN_URL=turn:YOUR_ELASTIC_IP:3478
 TURN_USERNAME=nepzo_turn
 TURN_CREDENTIAL=your_strong_password_here
-TURN_REALM=api.nepzo.rentoranepal.com
+TURN_REALM=your.domain.com
+TURN_EXTERNAL_IP=YOUR_ELASTIC_IP
+TURN_PRIVATE_IP=YOUR_EC2_PRIVATE_IP
 ```
+
+On EC2: `curl -s http://169.254.169.254/latest/meta-data/public-ipv4` and `local-ipv4`. `TURN_USERNAME` / `TURN_CREDENTIAL` must match what the entrypoint passes to `--user=`.
 
 Generate a strong password: `openssl rand -hex 16`
 
@@ -208,7 +214,7 @@ cd /home/ubuntu/nepzo/server
 docker compose up -d --build
 ```
 
-Coturn starts with the API. It auto-detects the EC2 external IP via `DETECT_EXTERNAL_IP=yes`.
+Coturn starts with the API. `TURN_EXTERNAL_IP` / `TURN_PRIVATE_IP` set `--external-ip` so relay candidates advertise your **public** address (required on EC2).
 
 ### 4. Verify
 
@@ -240,10 +246,11 @@ docker compose logs coturn
 
 | Issue | Fix |
 |-------|-----|
+| `Address already in use` / `Cannot bind ... 127.0.0.1:3478` | Only one process may use 3478 with `network_mode: host`. Stop the **other** coturn: `sudo ss -lptnu 'sport = :3478'` or `sudo lsof -i :3478`. If Ubuntu’s **systemd** coturn is installed: `sudo systemctl stop coturn && sudo systemctl disable coturn`. Then `docker compose up -d coturn`. |
 | No relay candidates | Check `external-ip` is correct (public/private). Restart coturn. |
-| Connection timeout | Open UDP 3478 and 49152-65535 in AWS Security Group. |
+| Connection timeout | Open **UDP+TCP 3478** and **UDP 49152-65535** in the security group; set `TURN_EXTERNAL_IP` / `TURN_PRIVATE_IP`. |
 | Auth failed | Ensure `TURN_USERNAME` and `TURN_CREDENTIAL` in `.env` match `user=` in turnserver.conf. |
-| Coturn won't start | Run `sudo turnserver -c /etc/turnserver.conf` to see errors. |
+| Coturn won't start | `docker compose logs coturn`. For native install: `sudo turnserver -c /etc/turnserver.conf` to see errors. |
 
 ---
 
@@ -251,9 +258,11 @@ docker compose logs coturn
 
 | Env Variable | Example |
 |--------------|---------|
-| `TURN_URL` | `turn:api.nepzo.rentoranepal.com:3478` |
+| `TURN_URL` | `turn:YOUR_ELASTIC_IP:3478` or `turn:dns-only-hostname:3478` |
 | `TURN_USERNAME` | `nepzo_turn` |
 | `TURN_CREDENTIAL` | (strong password) |
-| `TURN_REALM` | `api.nepzo.rentoranepal.com` (optional, for Docker Compose) |
+| `TURN_REALM` | Your domain (realm string) |
+| `TURN_EXTERNAL_IP` | EC2 Elastic / public IP (Docker Compose) |
+| `TURN_PRIVATE_IP` | EC2 private IP (e.g. `172.31.x.x`) |
 
 Your `configController.js` serves these to the mobile app via `GET /api/config/webrtc`. The app uses them automatically when establishing WebRTC connections.
