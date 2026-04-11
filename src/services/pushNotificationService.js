@@ -51,6 +51,8 @@ const sendIncomingCallPush = async (userId, data) => {
         notification: {
           channelId: 'incoming_call',
           sound: 'default',
+          visibility: 'public',
+          priority: 'max',
         },
       },
     });

@@ -183,11 +183,10 @@ LOG_LEVEL=info
 ########################################
 # Database (MongoDB)
 ########################################
-# Option 1: MongoDB on same host (Docker)
+# "mongo" only works inside Docker Compose. For PM2 / npm run dev on the host, use 127.0.0.1 (Mongo port published).
 MONGODB_URI=mongodb://mongo:27017/nepzo
-
-# Option 2: MongoDB Atlas (recommended for production)
-# MONGODB_URI=mongodb+srv://USER:PASSWORD@cluster.xxxxx.mongodb.net/nepzo?retryWrites=true&w=majority
+# MONGODB_URI=mongodb://127.0.0.1:27017/nepzo
+# Atlas: mongodb+srv://...
 
 ########################################
 # Encryption (generate new key for production!)
@@ -501,6 +500,16 @@ pm2 startup                 # Run the command it outputs (enables boot start)
 ```
 PM2 will auto-restart the app on crash and on server reboot.
 
+**Important:** If MongoDB, Redis, and MinIO still run in Docker with published ports (`27017`, `6379`, `9000`), your **host** `.env` must use **`127.0.0.1`**, not `mongo` / `redis` / `minio`. Those names only resolve **inside** the Compose network. Example:
+
+```env
+MONGODB_URI=mongodb://127.0.0.1:27017/nepzo
+MINIO_ENDPOINT=127.0.0.1
+CACHE_HOST=127.0.0.1
+```
+
+If you run **only** `docker compose` (including the `api` container) and do **not** use PM2 for the API, keep `mongo` / `minio` / `redis` in `.env` or rely on the `environment:` overrides in `docker-compose.yml`.
+
 ---
 
 ## 11. Maintenance & Updates
@@ -559,7 +568,7 @@ If you prefer **not** to use Docker for the Node API, you can run it with **PM2*
 
 ### Deploy with PM2 (Node only, no Docker for API)
 
-**Prerequisites:** MongoDB, Redis, and MinIO must run separately (Docker for those, or external services like MongoDB Atlas).
+**Prerequisites:** MongoDB, Redis, and MinIO must be reachable from the host (e.g. same-machine `docker compose` for those services with ports **27017**, **6379**, **9000** published — then point `.env` at **`127.0.0.1`**, not `mongo` / `redis` / `minio`). Or use external services (e.g. MongoDB Atlas).
 
 #### Step 1: Install PM2
 
@@ -607,7 +616,7 @@ pm2 monit                # Real-time monitoring
 | 502 Bad Gateway | Check `docker compose ps` — API container running? Check `docker compose logs api` |
 | Connection refused | Ensure security group allows 80, 443; Nginx is running: `sudo systemctl status nginx` |
 | WebSocket fails | Verify `Upgrade` and `Connection` headers in Nginx config |
-| MongoDB connection error | Check `MONGODB_URI`; ensure `mongo` hostname in Docker network |
+| MongoDB `EAI_AGAIN mongo` / connection error | **Host (PM2 / `npm run dev`):** use `MONGODB_URI=mongodb://127.0.0.1:27017/nepzo` when Mongo runs in Docker with port published. **`mongo` hostname only works inside Docker Compose.** Also set `MINIO_ENDPOINT=127.0.0.1` and `CACHE_HOST=127.0.0.1` for the same setup. |
 | SSL certificate error | Run `sudo certbot renew --force-renewal` |
 
 ---
