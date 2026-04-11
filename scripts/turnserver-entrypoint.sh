@@ -5,6 +5,12 @@
 # Only one turn server may bind 3478 on the host (network_mode: host).
 set -e
 TURN_REALM="${TURN_REALM:-api.growlitenepal.com}"
+
+if [ -z "${TURN_USERNAME}" ] || [ -z "${TURN_CREDENTIAL}" ]; then
+  echo "coturn: TURN_USERNAME and TURN_CREDENTIAL must be non-empty (set in .env)." >&2
+  exit 1
+fi
+
 USERPAIR="${TURN_USERNAME}:${TURN_CREDENTIAL}"
 
 CONF="$(mktemp)"
@@ -30,6 +36,8 @@ if [ -n "$TURN_EXTERNAL_IP" ] && [ -n "$TURN_PRIVATE_IP" ]; then
   echo "external-ip=${TURN_EXTERNAL_IP}/${TURN_PRIVATE_IP}" >>"$CONF"
 elif [ -n "$TURN_EXTERNAL_IP" ]; then
   echo "external-ip=${TURN_EXTERNAL_IP}" >>"$CONF"
+else
+  echo "coturn: warning: TURN_EXTERNAL_IP unset — relay candidates may be wrong on cloud VMs (set TURN_EXTERNAL_IP and TURN_PRIVATE_IP). See TURN_SETUP.md." >&2
 fi
 
 exec turnserver -n -c "$CONF" "$@"
