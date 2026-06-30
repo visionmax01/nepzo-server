@@ -41,18 +41,61 @@ const sendIncomingCallPush = async (userId, data) => {
     const messaging = getMessaging();
     await messaging.send({
       token: pushToken,
-      notification: {
-        title: 'Incoming Call',
-        body: `${data.callerName || 'Unknown'} is calling you (${typeLabel})`,
-      },
       data: dataPayload,
       android: {
         priority: 'high',
-        notification: {
-          channelId: 'incoming_call',
-          sound: 'default',
-          visibility: 'public',
-          priority: 'max',
+      },
+      apns: {
+        payload: {
+          aps: {
+            alert: {
+              title: 'Incoming Call',
+              body: `${data.callerName || 'Unknown'} is calling you (${typeLabel})`,
+            },
+            sound: 'default',
+            badge: badge,
+            'content-available': 1,
+          },
+        },
+      },
+    });
+  } catch (err) {
+    const code = err?.errorInfo?.code || err?.code;
+    const invalidTokenCodes = [
+      'messaging/registration-token-not-registered',
+      'messaging/invalid-registration-token',
+    ];
+    if (invalidTokenCodes.includes(code)) {
+      await User.findByIdAndUpdate(userId, { $unset: { pushToken: 1 } });
+    }
+  }
+};
+
+const sendMiscalledPush = async (userId, data) => {
+  try {
+    const user = await User.findById(userId).select('pushToken').lean();
+    const pushToken = user?.pushToken;
+    if (!pushToken) return;
+    if (!isFcmToken(pushToken)) return;
+    const badge = await getBadgeCountForUser(userId);
+    const dataPayload = stringifyData({ ...data, badge });
+    const messaging = getMessaging();
+    await messaging.send({
+      token: pushToken,
+      data: dataPayload,
+      android: {
+        priority: 'high',
+      },
+      apns: {
+        payload: {
+          aps: {
+            alert: {
+              title: 'Missed Call',
+              body: `${data.callerName || 'Someone'} tried to call you`,
+            },
+            sound: 'default',
+            badge: badge,
+          },
         },
       },
     });
@@ -105,10 +148,9 @@ const sendPushNotification = async (userId, { title, body, data, channelId }) =>
 };
 
 export const sendMiscalledNotification = async (calleeId, callerName) => {
-  await sendPushNotification(calleeId, {
-    title: 'Missed Call',
-    body: `${callerName || 'Someone'} tried to call you`,
-    data: { type: 'miscalled', callerName: callerName || 'Unknown' },
+  await sendMiscalledPush(calleeId, {
+    type: 'miscalled',
+    callerName: callerName || 'Unknown',
   });
 };
 

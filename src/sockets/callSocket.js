@@ -48,11 +48,12 @@ export const registerCallSocket = (io, socket) => {
       callerAvatar,
     });
 
-    // Always emit call_ringing so caller gets ringing feedback (callee may be reached via push when app in background)
-    socket.emit('call_ringing', { calleeId });
-
     // Always send push: callee may be "online" (socket connected) but app in background
     sendIncomingCallNotification(calleeId, user.id, callerName, callType, callerAvatar).catch(() => {});
+  });
+
+  socket.on('call_ringing', ({ otherUserId }) => {
+    io.to(`user:${otherUserId}`).emit('call_ringing', { userId: user.id });
   });
 
   socket.on('accept_call', ({ otherUserId }) => {

@@ -18,8 +18,7 @@ export const ensureMinioBucket = async () => {
       logger.info(`Created MinIO bucket ${env.minio.bucket}`);
     }
   } catch (err) {
-    logger.error('Error ensuring MinIO bucket', err);
-    throw err;
+    logger.warn(`[MinIO] Warning: Failed to connect to MinIO. Media uploads will fail, but server is starting. Error: ${err.message}`);
   }
 };
 
