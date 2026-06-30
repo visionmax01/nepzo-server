@@ -1,0 +1,59 @@
+services:
+  # Managed Redis Cache
+  - type: redis
+    name: nepzo-redis
+    plan: free
+    ipAllowList: []
+
+  # Express Web Service
+  - type: web
+    name: nepzo-server
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: CLIENT_ORIGIN
+        value: '*'
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_ANDROID_CLIENT_ID
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON_B64
+        sync: false
+      # AWS S3 (Backup storage - set to dummy by default)
+      - key: AWS_REGION
+        value: 'us-east-1'
+      - key: AWS_ACCESS_KEY_ID
+        value: 'dummy'
+      - key: AWS_SECRET_ACCESS_KEY
+        value: 'dummy'
+      - key: S3_BUCKET
+        value: 'dummy'
+      # MinIO (Primary media storage - S3 compatible. Point this to an S3-compatible service like AWS S3 or Cloudflare R2)
+      - key: MINIO_ENDPOINT
+        value: 'dummy'
+      - key: MINIO_PORT
+        value: '9000'
+      - key: MINIO_ACCESS_KEY
+        value: 'dummy'
+      - key: MINIO_SECRET_KEY
+        value: 'dummy'
+      - key: MINIO_BUCKET
+        value: 'dummy'
+      # Redis Cache Config
+      - key: CACHE_ENABLED
+        value: 'true'
+      - key: CACHE_URL
+        fromService:
+          type: redis
+          name: nepzo-redis
+          property: connectionString

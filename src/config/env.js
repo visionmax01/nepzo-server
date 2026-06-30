@@ -50,7 +50,7 @@ export const env = {
 
   cache: {
     enabled: process.env.CACHE_ENABLED !== 'false',
-    url: process.env.CACHE_URL || undefined,
+    url: process.env.CACHE_URL || process.env.REDIS_URL || undefined,
     host: process.env.CACHE_HOST || 'localhost',
     port: Number(process.env.CACHE_PORT) || 6379,
     username: process.env.CACHE_USERNAME || undefined,
